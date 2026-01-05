@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // Handle variable name with dash using bracket notation
+    const apiKey = env['openrouter_groq-gptoss_key'] || env.VITE_OPENROUTER_API_KEY || '';
     return {
       server: {
         port: 3000,
@@ -11,8 +13,7 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'import.meta.env.VITE_OPENROUTER_API_KEY': JSON.stringify(apiKey)
       },
       resolve: {
         alias: {

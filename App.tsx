@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { UploadIcon, TextIcon, SparklesIcon, CopyIcon, CheckIcon, CameraIcon, PlusIcon, XIcon } from './components/Icons';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { extractBusinessCardInfo } from './services/geminiService';
+import { extractBusinessCardInfo } from './services/openrouterService';
 import { generateEmailContent, INITIAL_EVENT_NAME, INITIAL_SENDER_NAME } from './constants';
 import { InputMode, GeneratedEmail } from './types';
 
@@ -69,7 +69,7 @@ const App: React.FC = () => {
     setResult(null);
 
     try {
-      // 1. Extract Info using Gemini
+      // 1. Extract Info using OpenRouter
       const extractedInfo = await extractBusinessCardInfo(
         inputMode === InputMode.IMAGE ? selectedImage : null,
         inputMode === InputMode.TEXT ? textInput : null
@@ -368,7 +368,7 @@ const App: React.FC = () => {
 
         {/* Footer */}
         <div className="text-center text-xs text-slate-400">
-           Powered by Google Gemini AI
+           Powered by OpenRouter AI
         </div>
       </div>
     </div>

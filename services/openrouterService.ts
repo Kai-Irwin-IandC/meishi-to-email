@@ -1,0 +1,169 @@
+import { OpenRouter } from "@openrouter/sdk";
+import { ExtractedInfo } from "../types";
+
+// Get API key from environment (Vite uses import.meta.env for client-side)
+const getApiKey = () => {
+  return import.meta.env.VITE_OPENROUTER_API_KEY || '';
+};
+
+// Initialize OpenRouter lazily to avoid errors on module load
+const getOpenRouter = () => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error("OpenRouter API key is not configured. Please set openrouter_groq-gptoss_key in your .env.local file.");
+  }
+  return new OpenRouter({
+    apiKey: apiKey
+  });
+};
+
+/**
+ * Extracts company name and person name from a business card image or text.
+ */
+export const extractBusinessCardInfo = async (
+  imageData: string | null,
+  textData: string | null
+): Promise<ExtractedInfo> => {
+  
+  const isImageMode = !!imageData;
+  
+  // Use a vision-capable model for images, or gpt-oss-120b for text
+  // For images, we'll use a vision model. For text, use gpt-oss-120b
+  const modelName = isImageMode 
+    ? "openai/gpt-4o" // Vision-capable model for image analysis
+    : "openai/gpt-oss-120b"; // Text model from user's example
+
+  const promptText = `
+    You are an expert secretary AI. 
+    Analyze the provided business card information.
+    Extract the official Company Name (Corporate Entity) and the Person's Name.
+    
+    Rules:
+    1. Extract the full company name (e.g., "Google Inc." not just "Google").
+    2. Extract the full person name.
+    3. If the company name is missing, return an empty string.
+    4. If the person name is missing or unclear, infer strictly from context or return "ご担当者".
+    5. Return ONLY a valid JSON object with the structure: {"companyName": "...", "personName": "..."}
+  `;
+
+  // Build messages array for OpenRouter
+  const contentParts: any[] = [];
+  
+  // Add text prompt
+  contentParts.push({
+    type: "text",
+    text: promptText
+  });
+
+  // Add image if provided
+  if (isImageMode && imageData) {
+    // Extract mime type and base64 data from data URL
+    const matches = imageData.match(/^data:(.+);base64,(.+)$/);
+    
+    if (matches) {
+      const mimeType = matches[1];
+      const base64Data = matches[2];
+      
+      contentParts.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${mimeType};base64,${base64Data}`
+        }
+      });
+    } else {
+      // Fallback if format is unexpected
+      const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+      contentParts.push({
+        type: "image_url",
+        image_url: {
+          url: `data:image/png;base64,${base64Data}`
+        }
+      });
+    }
+  } else if (textData) {
+    contentParts.push({
+      type: "text",
+      text: `Business Card Text Content:\n${textData}`
+    });
+  }
+
+  // For OpenRouter, content can be a string or array of content parts
+  const messages = [
+    {
+      role: "user" as const,
+      content: contentParts.length === 1 && contentParts[0].type === "text" 
+        ? contentParts[0].text 
+        : contentParts
+    }
+  ];
+
+  try {
+    // Initialize OpenRouter when needed
+    const openrouter = getOpenRouter();
+    
+    // Use non-streaming for JSON response
+    const response = await openrouter.chat.send({
+      model: modelName,
+      messages: messages,
+      stream: false,
+      response_format: {
+        type: "json_object"
+      }
+    });
+
+    // Handle response - when stream: false, response should be a direct object
+    let fullResponse = "";
+    
+    if (response && typeof response === 'object') {
+      // Check if it's a streaming response (async iterable)
+      if (Symbol.asyncIterator in response) {
+        // Handle streaming response (shouldn't happen with stream: false, but just in case)
+        for await (const chunk of response as any) {
+          const content = chunk.choices?.[0]?.delta?.content;
+          if (content) {
+            fullResponse += content;
+          }
+        }
+      } else if ('choices' in response && Array.isArray(response.choices)) {
+        // Non-streaming response - extract content from message
+        const message = response.choices[0]?.message;
+        if (message) {
+          // Content can be a string or array
+          if (typeof message.content === 'string') {
+            fullResponse = message.content;
+          } else if (Array.isArray(message.content)) {
+            // Extract text from content array
+            const textPart = message.content.find((part: any) => part.type === 'text');
+            if (textPart?.text) {
+              fullResponse = textPart.text;
+            }
+          }
+        }
+      }
+    }
+
+    if (fullResponse) {
+      // Try to parse JSON from the response
+      let jsonText = fullResponse.trim();
+      // Remove markdown code blocks if present
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+      }
+      
+      const result = JSON.parse(jsonText) as ExtractedInfo;
+      
+      // Validate required fields
+      if (!result.companyName || !result.personName) {
+        throw new Error("Invalid response format: missing required fields");
+      }
+      
+      return result;
+    } else {
+      throw new Error("No response content generated");
+    }
+  } catch (error: any) {
+    console.error("OpenRouter Extraction Error:", error);
+    throw new Error("名刺情報の読み取りに失敗しました。もう一度お試しください。");
+  }
+};
+
