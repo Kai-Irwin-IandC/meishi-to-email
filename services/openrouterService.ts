@@ -9,6 +9,7 @@ const getApiKey = () => {
 // Initialize OpenRouter lazily to avoid errors on module load
 const getOpenRouter = () => {
   const apiKey = getApiKey();
+  console.log('OpenRouter API Key check:', apiKey ? 'Key found' : 'Key MISSING');
   if (!apiKey) {
     throw new Error("OpenRouter API key is not configured. Please set openrouter_groq-gptoss_key in your .env.local file.");
   }
@@ -27,11 +28,8 @@ export const extractBusinessCardInfo = async (
   
   const isImageMode = !!imageData;
   
-  // Use a vision-capable model for images, or gpt-oss-120b for text
-  // For images, we'll use a vision model. For text, use gpt-oss-120b
-  const modelName = isImageMode 
-    ? "openai/gpt-4o" // Vision-capable model for image analysis
-    : "openai/gpt-oss-120b"; // Text model from user's example
+  // Use google/gemini-2.5-flash as requested
+  const modelName = "google/gemini-2.5-flash";
 
   const promptText = `
     You are an expert secretary AI. 
@@ -101,48 +99,38 @@ export const extractBusinessCardInfo = async (
     // Initialize OpenRouter when needed
     const openrouter = getOpenRouter();
     
-    // Use non-streaming for JSON response
+    // Use streaming as requested in the example
     const response = await openrouter.chat.send({
       model: modelName,
       messages: messages,
-      stream: false,
+      stream: true,
       response_format: {
         type: "json_object"
       }
     });
 
-    // Handle response - when stream: false, response should be a direct object
+    // Handle streaming response - assemble chunks
     let fullResponse = "";
     
-    if (response && typeof response === 'object') {
-      // Check if it's a streaming response (async iterable)
-      if (Symbol.asyncIterator in response) {
-        // Handle streaming response (shouldn't happen with stream: false, but just in case)
-        for await (const chunk of response as any) {
-          const content = chunk.choices?.[0]?.delta?.content;
-          if (content) {
-            fullResponse += content;
-          }
+    if (response && typeof response === 'object' && Symbol.asyncIterator in response) {
+      for await (const chunk of response as any) {
+        const content = chunk.choices?.[0]?.delta?.content;
+        if (content) {
+          fullResponse += content;
         }
-      } else if ('choices' in response && Array.isArray(response.choices)) {
-        // Non-streaming response - extract content from message
-        const message = response.choices[0]?.message;
-        if (message) {
-          // Content can be a string or array
-          if (typeof message.content === 'string') {
-            fullResponse = message.content;
-          } else if (Array.isArray(message.content)) {
-            // Extract text from content array
-            const textPart = message.content.find((part: any) => part.type === 'text');
-            if (textPart?.text) {
-              fullResponse = textPart.text;
-            }
-          }
-        }
+      }
+    } else if (response && typeof response === 'object' && 'choices' in response) {
+      // Fallback for non-streaming if SDK behaves differently
+      const message = (response as any).choices?.[0]?.message;
+      if (message?.content) {
+        fullResponse = typeof message.content === 'string' 
+          ? message.content 
+          : (message.content.find((p: any) => p.type === 'text')?.text || "");
       }
     }
 
     if (fullResponse) {
+      console.log("OpenRouter Full Response Content:", fullResponse);
       // Try to parse JSON from the response
       let jsonText = fullResponse.trim();
       // Remove markdown code blocks if present
@@ -162,8 +150,20 @@ export const extractBusinessCardInfo = async (
       throw new Error("No response content generated");
     }
   } catch (error: any) {
-    console.error("OpenRouter Extraction Error:", error);
-    throw new Error("名刺情報の読み取りに失敗しました。もう一度お試しください。");
+    console.error("OpenRouter Extraction Error Details:", {
+      message: error.message,
+      stack: error.stack,
+      error: error
+    });
+    
+    // Check for specific error types
+    if (error.message?.includes("401")) {
+      throw new Error("APIキーが無効です。設定を確認してください。");
+    } else if (error.message?.includes("404")) {
+      throw new Error("指定されたモデルが見つかりません。モデルIDを確認してください。");
+    }
+    
+    throw new Error(`名刺情報の読み取りに失敗しました: ${error.message || "予期せぬエラー"}`);
   }
 };
 
