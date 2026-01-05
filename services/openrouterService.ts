@@ -11,7 +11,7 @@ const getOpenRouter = () => {
   const apiKey = getApiKey();
   console.log('OpenRouter API Key check:', apiKey ? 'Key found' : 'Key MISSING');
   if (!apiKey) {
-    throw new Error("OpenRouter API key is not configured. If you are on Vercel, please add openrouter_groq-gptoss_key to your Environment Variables and redeploy.");
+    throw new Error("OpenRouter API key is not configured. If you are on Vercel, please add openrouter_groq_gptoss_key to your Environment Variables and redeploy.");
   }
   return new OpenRouter({
     apiKey: apiKey
