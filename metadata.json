@@ -1,0 +1,5 @@
+{
+  "name": "Secretary AI - Email Generator",
+  "description": "An intelligent assistant that generates professional thank-you emails from business cards using Gemini AI.",
+  "requestFramePermissions": []
+}
