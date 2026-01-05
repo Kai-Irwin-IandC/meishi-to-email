@@ -64,7 +64,7 @@ export const extractBusinessCardInfo = async (
       
       contentParts.push({
         type: "image_url",
-        image_url: {
+        imageUrl: {
           url: `data:${mimeType};base64,${base64Data}`
         }
       });
@@ -73,7 +73,7 @@ export const extractBusinessCardInfo = async (
       const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
       contentParts.push({
         type: "image_url",
-        image_url: {
+        imageUrl: {
           url: `data:image/png;base64,${base64Data}`
         }
       });
@@ -104,7 +104,7 @@ export const extractBusinessCardInfo = async (
       model: modelName,
       messages: messages,
       stream: true,
-      response_format: {
+      responseFormat: {
         type: "json_object"
       }
     });
