@@ -139,10 +139,22 @@ export const extractBusinessCardInfo = async (
       }
       
       const result = JSON.parse(jsonText) as ExtractedInfo;
+      console.log("OpenRouter Parsed Result:", result);
       
-      // Validate required fields
-      if (!result.companyName || !result.personName) {
-        throw new Error("Invalid response format: missing required fields");
+      // Validate required fields exist (even if they are empty strings)
+      if (result.companyName === undefined || result.personName === undefined) {
+        // Try to handle snake_case if the AI ignored the camelCase instruction
+        const companyName = result.companyName ?? (result as any).company_name;
+        const personName = result.personName ?? (result as any).person_name;
+        
+        if (companyName === undefined || personName === undefined) {
+          throw new Error(`Invalid response format: missing fields. Received keys: ${Object.keys(result).join(', ')}`);
+        }
+        
+        return {
+          companyName: companyName || "",
+          personName: personName || "ご担当者"
+        };
       }
       
       return result;
